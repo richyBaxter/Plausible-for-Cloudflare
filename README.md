@@ -1,6 +1,10 @@
 # Insights
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/richyBaxter/Plausible-for-Cloudflare)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/houtini-ai/Insights)
+[![CI](https://github.com/houtini-ai/Insights/actions/workflows/ci.yml/badge.svg)](https://github.com/houtini-ai/Insights/actions/workflows/ci.yml)
+
+> The deploy button clones via the public repo URL, so it activates once the
+> repository is made public. While private, use the manual deploy below.
 
 A privacy-friendly, cookieless web-analytics platform that runs **entirely on the
 Cloudflare edge** — a single Worker backed by **D1** (SQLite) and **KV**, with a

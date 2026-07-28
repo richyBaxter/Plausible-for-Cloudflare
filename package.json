@@ -1,8 +1,16 @@
 {
-  "name": "insights",
+  "name": "@houtini/insights",
   "version": "1.0.0",
-  "description": "Insights — a privacy-friendly, cookieless web analytics platform that runs entirely on Cloudflare Workers + D1, with a native API, a Plausible-compatible ingestion shim, and a built-in MCP server. Deployable at stats.houtini.ai.",
+  "description": "Privacy-friendly, cookieless web analytics on Cloudflare Workers + D1 — native API, Plausible-compatible ingestion, and a built-in MCP server.",
   "private": true,
+  "license": "MIT",
+  "author": "Houtini (https://houtini.ai)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/houtini-ai/Insights.git"
+  },
+  "homepage": "https://github.com/houtini-ai/Insights#readme",
+  "bugs": "https://github.com/houtini-ai/Insights/issues",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
