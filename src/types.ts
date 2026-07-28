@@ -14,6 +14,8 @@ export interface Env {
   // secrets
   DASHBOARD_PASSWORD: string;
   AUTH_SECRET: string;
+  /** Bearer token that authenticates MCP clients at POST /mcp. Optional: if unset, the MCP server is disabled. */
+  MCP_API_KEY?: string;
 }
 
 /** Raw event payload as sent by the tracking script (Plausible wire-compatible). */

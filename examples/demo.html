@@ -3,23 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Plausible-for-Cloudflare — integration demo</title>
+  <title>Insights — integration demo</title>
 
   <!--
-    This is exactly how you add analytics to any site. It is byte-for-byte the
-    same snippet Plausible uses — the only change is the `src` host.
-
-    Standard pageview + custom-event tracking:
+    Native Insights snippet. This is all you need to add analytics to any site:
   -->
-  <script defer data-domain="houtini.ai" src="https://stats.houtini.ai/js/script.js"></script>
+  <script defer data-domain="houtini.ai" src="https://stats.houtini.ai/insights.js"></script>
 
   <!--
-    Optional stub so calls to plausible(...) before the script loads are queued
-    (identical to Plausible's recommended snippet):
+    Migrating from Plausible? Change ONLY the src host and keep everything else:
+    <script defer data-domain="houtini.ai" src="https://stats.houtini.ai/js/script.js"></script>
+  -->
+
+  <!--
+    Optional stub so calls to insights(...) before the script loads are queued:
   -->
   <script>
-    window.plausible = window.plausible || function () {
-      (window.plausible.q = window.plausible.q || []).push(arguments);
+    window.insights = window.insights || function () {
+      (window.insights.q = window.insights.q || []).push(arguments);
     };
   </script>
 
@@ -30,11 +31,11 @@
   </style>
 </head>
 <body>
-  <h1>Analytics demo</h1>
+  <h1>Insights demo</h1>
   <p>Loading this page sends a <code>pageview</code> to <code>stats.houtini.ai</code>.</p>
 
   <p>Click to fire a custom event named <code>Signup</code> with a property:</p>
-  <button onclick="plausible('Signup', { props: { plan: 'pro' }, callback: () => alert('event sent!') })">
+  <button onclick="insights('Signup', { props: { plan: 'pro' }, callback: () => alert('event sent!') })">
     Track “Signup”
   </button>
 
@@ -43,7 +44,14 @@
     The script automatically tracks pushState/popstate navigations, so React
     Router / Vue Router / SvelteKit route changes are counted with no extra code.
     For hash-based routers, use
-    <code>src="https://stats.houtini.ai/js/script.hash.js"</code>.
+    <code>src="https://stats.houtini.ai/insights.hash.js"</code>.
+  </p>
+
+  <h2>Ask your data anything</h2>
+  <p>
+    Connect Claude to <code>https://stats.houtini.ai/mcp</code> (with your
+    <code>MCP_API_KEY</code> as a bearer token) and ask questions like
+    “what were my top pages and referrers this week?” — no dashboard required.
   </p>
 </body>
 </html>

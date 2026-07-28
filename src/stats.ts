@@ -49,7 +49,10 @@ interface Period {
   label: string;
 }
 
-function parsePeriod(raw: string): Period {
+/** Valid `period` values, exported so the MCP tool schema can advertise them. */
+export const PERIODS = ["day", "7d", "30d", "month", "6mo", "12mo"] as const;
+
+export function parsePeriod(raw: string): Period {
   const now = new Date();
   const nowSec = Math.floor(now.getTime() / 1000);
   const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000;
@@ -125,7 +128,7 @@ function bucketExpr(interval: Interval): string {
 // Queries
 // --------------------------------------------------------------------------- //
 
-async function currentVisitors(env: Env, domain: string): Promise<{ visitors: number }> {
+export async function currentVisitors(env: Env, domain: string): Promise<{ visitors: number }> {
   const cutoff = Math.floor(Date.now() / 1000) - 300;
   const row = await env.DB.prepare(
     `SELECT COUNT(DISTINCT user_id) AS v FROM sessions WHERE domain = ? AND last_activity >= ?`,
@@ -144,7 +147,7 @@ interface Aggregate {
   period: string;
 }
 
-async function aggregate(env: Env, domain: string, p: Period): Promise<Aggregate> {
+export async function aggregate(env: Env, domain: string, p: Period): Promise<Aggregate> {
   const ev = await env.DB.prepare(
     `SELECT COUNT(DISTINCT user_id) AS visitors,
             SUM(CASE WHEN name = 'pageview' THEN 1 ELSE 0 END) AS pageviews
@@ -172,7 +175,7 @@ async function aggregate(env: Env, domain: string, p: Period): Promise<Aggregate
   };
 }
 
-async function timeseries(env: Env, domain: string, p: Period): Promise<{ interval: Interval; series: { date: string; visitors: number; pageviews: number }[] }> {
+export async function timeseries(env: Env, domain: string, p: Period): Promise<{ interval: Interval; series: { date: string; visitors: number; pageviews: number }[] }> {
   const expr = bucketExpr(p.interval);
   const rows = await env.DB.prepare(
     `SELECT ${expr} AS bucket,
@@ -220,7 +223,10 @@ const PROPS: Record<string, { table: "sessions" | "events"; column: string; wher
   goal: { table: "events", column: "name", where: "name != 'pageview'", pageviews: true },
 };
 
-async function breakdown(env: Env, domain: string, p: Period, property: string, limit: number): Promise<{ property: string; results: BreakdownItem[] }> {
+/** All breakdown dimensions, exported so the MCP tool schema can advertise them. */
+export const PROPERTIES = Object.keys(PROPS);
+
+export async function breakdown(env: Env, domain: string, p: Period, property: string, limit: number): Promise<{ property: string; results: BreakdownItem[] }> {
   const spec = PROPS[property];
   if (!spec) return { property, results: [] };
 

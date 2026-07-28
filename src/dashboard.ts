@@ -84,7 +84,7 @@ export function dashboardPage(env: Env): Response {
       <div id="goals" class="list"></div>
     </section>
   </div>
-  <footer class="foot">Powered by <a href="https://github.com/richybaxter/plausible-for-cloudflare">Plausible-for-Cloudflare</a> · privacy-friendly, cookieless analytics on the edge.</footer>
+  <footer class="foot">Powered by <a href="https://github.com/richybaxter/plausible-for-cloudflare">Insights</a> · privacy-friendly, cookieless analytics on the Cloudflare edge · <a href="/mcp" title="Model Context Protocol endpoint for AI clients">MCP</a></footer>
 </main>
 <script>${DASH_JS}</script>
 </body></html>`;

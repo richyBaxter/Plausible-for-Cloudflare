@@ -1,13 +1,13 @@
 {
-  // Plausible-for-Cloudflare — Worker configuration.
+  // Insights — Cloudflare Worker configuration.
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "plausible-for-cloudflare",
+  "name": "insights",
   "main": "src/index.ts",
   "compatibility_date": "2025-05-01",
   "compatibility_flags": ["nodejs_compat"],
 
-  // Serve the analytics dashboard + tracking script + ingestion at stats.houtini.ai.
+  // Serve the dashboard + tracking scripts + ingestion + MCP server at stats.houtini.ai.
   // custom_domain provisions DNS + TLS automatically for a subdomain in a zone
   // that is already on this Cloudflare account. Change the hostname to redeploy elsewhere.
   "routes": [
@@ -21,8 +21,8 @@
     "enabled": true
   },
 
-  // Non-secret configuration. Secrets (DASHBOARD_PASSWORD, AUTH_SECRET) are set with
-  // `wrangler secret put ...` — never commit them here.
+  // Non-secret configuration. Secrets (DASHBOARD_PASSWORD, AUTH_SECRET, MCP_API_KEY)
+  // are set with `wrangler secret put ...` — never commit them here.
   "vars": {
     // Primary site this instance tracks. Events for this domain (and its subdomains)
     // are accepted; set to "*" to accept any domain (multi-site mode).
@@ -31,12 +31,12 @@
     "SITE_NAME": "houtini.ai"
   },
 
-  // D1 stores raw events + rolled-up sessions and powers every dashboard query.
+  // D1 stores raw events + rolled-up sessions and powers every dashboard/MCP query.
   // Create it with `npm run db:create` and paste the returned database_id below.
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "plausible-for-cloudflare",
+      "database_name": "insights",
       "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }
@@ -54,6 +54,6 @@
   // Optional: mirror every event into Analytics Engine for unlimited-retention,
   // SQL-queryable time series. Uncomment and the ingester will dual-write.
   // "analytics_engine_datasets": [
-  //   { "binding": "AE", "dataset": "plausible_events" }
+  //   { "binding": "AE", "dataset": "insights_events" }
   // ]
 }

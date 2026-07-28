@@ -16,12 +16,12 @@ export async function handleEvent(req: Request, env: Env, ctx: ExecutionContext)
 
   let payload: EventPayload;
   try {
-    payload = (await req.json()) as EventPayload;
+    payload = normalisePayload((await req.json()) as Record<string, unknown>);
   } catch {
     return new Response("Bad Request: invalid JSON", { status: 400 });
   }
   if (!payload || !payload.n || !payload.u || !payload.d) {
-    return new Response("Bad Request: missing n/u/d", { status: 400 });
+    return new Response("Bad Request: missing event/url/domain", { status: 400 });
   }
 
   // Domain allow-list. SITE_DOMAIN="*" accepts any site (multi-tenant mode);
@@ -167,6 +167,29 @@ function findOpenSession(env: Env, userId: string, domain: string, cutoff: numbe
     .bind(userId, domain, cutoff)
     .first<SessionRow>();
 }
+
+/**
+ * Accept both the native Insights payload ({ event, url, domain, referrer,
+ * viewport, props, hash }) and the Plausible-compatible payload ({ n, u, d, r,
+ * w, p, h }). Native field names win when both are present.
+ */
+function normalisePayload(raw: Record<string, unknown>): EventPayload {
+  const pick = (native: string, legacy: string) => raw[native] ?? raw[legacy];
+  return {
+    n: str(pick("event", "n")),
+    u: str(pick("url", "u")),
+    d: str(pick("domain", "d")),
+    r: (pick("referrer", "r") as string | null | undefined) ?? null,
+    w: num(raw["viewport"] ?? raw["width"] ?? raw["w"]),
+    h: (raw["hash"] ?? raw["h"]) as number | boolean | undefined,
+    p: (raw["props"] ?? raw["p"]) as EventPayload["p"],
+  };
+}
+const str = (v: unknown): string => (v == null ? "" : String(v));
+const num = (v: unknown): number | undefined => {
+  const n = typeof v === "number" ? v : v == null ? NaN : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
 
 function domainAllowed(domain: string, configured: string): boolean {
   if (!configured || configured === "*") return true;
