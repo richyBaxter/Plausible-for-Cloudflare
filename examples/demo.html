@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plausible-for-Cloudflare — integration demo</title>
+
+  <!--
+    This is exactly how you add analytics to any site. It is byte-for-byte the
+    same snippet Plausible uses — the only change is the `src` host.
+
+    Standard pageview + custom-event tracking:
+  -->
+  <script defer data-domain="houtini.ai" src="https://stats.houtini.ai/js/script.js"></script>
+
+  <!--
+    Optional stub so calls to plausible(...) before the script loads are queued
+    (identical to Plausible's recommended snippet):
+  -->
+  <script>
+    window.plausible = window.plausible || function () {
+      (window.plausible.q = window.plausible.q || []).push(arguments);
+    };
+  </script>
+
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 10vh auto; padding: 0 20px; line-height: 1.6; }
+    button { padding: 10px 16px; font-size: 15px; border-radius: 8px; border: 1px solid #6366f1; background: #6366f1; color: #fff; cursor: pointer; }
+    code { background: #f1f1f4; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Analytics demo</h1>
+  <p>Loading this page sends a <code>pageview</code> to <code>stats.houtini.ai</code>.</p>
+
+  <p>Click to fire a custom event named <code>Signup</code> with a property:</p>
+  <button onclick="plausible('Signup', { props: { plan: 'pro' }, callback: () => alert('event sent!') })">
+    Track “Signup”
+  </button>
+
+  <h2>For single-page apps</h2>
+  <p>
+    The script automatically tracks pushState/popstate navigations, so React
+    Router / Vue Router / SvelteKit route changes are counted with no extra code.
+    For hash-based routers, use
+    <code>src="https://stats.houtini.ai/js/script.hash.js"</code>.
+  </p>
+</body>
+</html>

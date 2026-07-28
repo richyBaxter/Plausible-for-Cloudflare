@@ -1,0 +1,22 @@
+{
+  "name": "plausible-for-cloudflare",
+  "version": "1.0.0",
+  "description": "A Plausible-compatible, privacy-friendly web analytics platform that runs entirely on Cloudflare Workers + D1. Deployable at stats.houtini.ai.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:create": "wrangler d1 create plausible-for-cloudflare",
+    "db:migrate": "wrangler d1 migrations apply plausible-for-cloudflare --remote",
+    "db:migrate:local": "wrangler d1 migrations apply plausible-for-cloudflare --local",
+    "kv:create": "wrangler kv namespace create SALT_KV",
+    "secrets": "echo 'Set with: wrangler secret put DASHBOARD_PASSWORD && wrangler secret put AUTH_SECRET'"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20250101.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}
