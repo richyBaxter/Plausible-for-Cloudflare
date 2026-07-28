@@ -12,7 +12,8 @@
     "db:migrate": "wrangler d1 migrations apply insights --remote",
     "db:migrate:local": "wrangler d1 migrations apply insights --local",
     "kv:create": "wrangler kv namespace create SALT_KV",
-    "secrets": "echo 'Set: wrangler secret put DASHBOARD_PASSWORD && wrangler secret put AUTH_SECRET && wrangler secret put MCP_API_KEY'"
+    "secrets": "echo 'Set: wrangler secret put DASHBOARD_PASSWORD && wrangler secret put AUTH_SECRET && wrangler secret put MCP_API_KEY'",
+    "test": "bash scripts/smoke.sh"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20250101.0",

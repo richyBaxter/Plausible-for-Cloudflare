@@ -4,6 +4,8 @@ import {
   timeseries,
   breakdown,
   currentVisitors,
+  funnel,
+  recentEvents,
   parsePeriod,
   PERIODS,
   PROPERTIES,
@@ -81,6 +83,42 @@ export const TOOLS: McpTool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "get_funnel",
+    description:
+      "Ordered conversion funnel. Give 2-8 steps, each either a page path (starting with '/', e.g. '/pricing') or a custom event/goal name (e.g. 'Signup'). Returns per-step visitor counts, conversion rate vs the first step, and drop-off. Steps are matched in time order per visitor.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        steps: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 2,
+          maxItems: 8,
+          description: "Ordered funnel steps: page paths ('/checkout') or event names ('Purchase').",
+        },
+        period: periodProp,
+        domain: domainProp,
+      },
+      required: ["steps"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_events",
+    description:
+      "Most recent raw events (newest first), for inspecting live/recent activity. Optionally filter to a single event name (e.g. 'pageview' or a goal). Each row includes time, name, path, source, country, browser, OS, device and custom props.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 100, default: 20, description: "Max events to return." },
+        name: { type: "string", description: "Optional event-name filter, e.g. 'pageview' or a goal name." },
+        period: periodProp,
+        domain: domainProp,
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 /** Resolve which site a tool call targets. */
@@ -110,6 +148,16 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
       }
       const limit = clampInt(args.limit, 10, 1, 100);
       return breakdown(env, domain, period(), property, limit);
+    }
+    case "get_funnel": {
+      const steps = Array.isArray(args.steps) ? args.steps.map((s) => String(s).trim()).filter(Boolean) : [];
+      if (steps.length < 2) throw new Error("A funnel needs at least 2 steps.");
+      return funnel(env, domain, period(), steps.slice(0, 8));
+    }
+    case "get_events": {
+      const limit = clampInt(args.limit, 20, 1, 100);
+      const eventName = typeof args.name === "string" && args.name ? args.name : undefined;
+      return recentEvents(env, domain, period(), limit, eventName);
     }
     default:
       throw new Error(`Unknown tool: ${name}`);

@@ -31,6 +31,24 @@ export async function handleStats(url: URL, env: Env): Promise<Response> {
           clampInt(url.searchParams.get("limit"), 9, 1, 100),
         ),
       );
+    case "funnel": {
+      const steps = (url.searchParams.get("steps") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (steps.length < 2) return json({ error: "funnel requires at least 2 comma-separated steps" }, 400);
+      return json(await funnel(env, domain, period, steps.slice(0, 8)));
+    }
+    case "events":
+      return json(
+        await recentEvents(
+          env,
+          domain,
+          period,
+          clampInt(url.searchParams.get("limit"), 20, 1, 100),
+          url.searchParams.get("name") ?? undefined,
+        ),
+      );
     default:
       return json({ error: "unknown stats endpoint" }, 404);
   }
@@ -225,6 +243,129 @@ const PROPS: Record<string, { table: "sessions" | "events"; column: string; wher
 
 /** All breakdown dimensions, exported so the MCP tool schema can advertise them. */
 export const PROPERTIES = Object.keys(PROPS);
+
+// --------------------------------------------------------------------------- //
+// Funnels
+// --------------------------------------------------------------------------- //
+
+export interface FunnelStep {
+  step: string;
+  visitors: number;
+  conversion_rate: number; // % of visitors who entered the funnel (step 1)
+  dropoff: number; // visitors lost vs the previous step
+}
+
+/**
+ * Ordered conversion funnel. Each step is either a page path (starts with "/")
+ * or a custom event/goal name. A visitor "completes" step k only if they hit it
+ * *after* completing step k-1, so the funnel is strictly ordered in time.
+ */
+export async function funnel(
+  env: Env,
+  domain: string,
+  p: Period,
+  steps: string[],
+): Promise<{ steps: FunnelStep[]; entered: number }> {
+  const pages = steps.filter((s) => s.startsWith("/"));
+  const goals = steps.filter((s) => !s.startsWith("/"));
+
+  const clauses: string[] = [];
+  const binds: unknown[] = [domain, p.from, p.to];
+  if (pages.length) {
+    clauses.push(`(name = 'pageview' AND pathname IN (${pages.map(() => "?").join(",")}))`);
+    binds.push(...pages);
+  }
+  if (goals.length) {
+    clauses.push(`(name IN (${goals.map(() => "?").join(",")}))`);
+    binds.push(...goals);
+  }
+
+  const rows = await env.DB.prepare(
+    `SELECT user_id, name, pathname, timestamp
+       FROM events
+      WHERE domain = ? AND timestamp >= ? AND timestamp < ? AND (${clauses.join(" OR ")})
+      ORDER BY user_id, timestamp`,
+  )
+    .bind(...binds)
+    .all<{ user_id: string; name: string; pathname: string; timestamp: number }>();
+
+  const matches = (ev: { name: string; pathname: string }, step: string) =>
+    step.startsWith("/") ? ev.name === "pageview" && ev.pathname === step : ev.name === step;
+
+  // Walk each visitor's events in time order, advancing through the steps.
+  const counts = new Array(steps.length).fill(0);
+  let currentUser = "";
+  let cursor = 0;
+  const advance = () => {
+    for (let k = 0; k < cursor; k++) counts[k]++;
+  };
+  for (const ev of rows.results) {
+    if (ev.user_id !== currentUser) {
+      advance();
+      currentUser = ev.user_id;
+      cursor = 0;
+    }
+    if (cursor < steps.length && matches(ev, steps[cursor])) cursor++;
+  }
+  advance(); // flush the final visitor
+
+  const entered = counts[0] || 0;
+  const result: FunnelStep[] = steps.map((step, i) => ({
+    step,
+    visitors: counts[i],
+    conversion_rate: entered ? Math.round((counts[i] / entered) * 1000) / 10 : 0,
+    dropoff: i === 0 ? 0 : counts[i - 1] - counts[i],
+  }));
+  return { steps: result, entered };
+}
+
+// --------------------------------------------------------------------------- //
+// Raw event export
+// --------------------------------------------------------------------------- //
+
+export interface RawEvent {
+  timestamp: number;
+  time: string; // ISO-8601
+  name: string;
+  pathname: string;
+  source: string | null;
+  country: string | null;
+  browser: string | null;
+  os: string | null;
+  device: string | null;
+  props: string | null;
+}
+
+/** Most recent raw events (newest first), optionally filtered to one event name. */
+export async function recentEvents(
+  env: Env,
+  domain: string,
+  p: Period,
+  limit: number,
+  name?: string,
+): Promise<{ results: RawEvent[] }> {
+  const filters = ["domain = ?", "timestamp >= ?", "timestamp < ?"];
+  const binds: unknown[] = [domain, p.from, p.to];
+  if (name) {
+    filters.push("name = ?");
+    binds.push(name);
+  }
+  binds.push(limit);
+
+  const rows = await env.DB.prepare(
+    `SELECT timestamp, name, pathname, referrer_source AS source, country, browser, os, device, props
+       FROM events
+      WHERE ${filters.join(" AND ")}
+      ORDER BY timestamp DESC
+      LIMIT ?`,
+  )
+    .bind(...binds)
+    .all<Omit<RawEvent, "time">>();
+
+  return {
+    results: rows.results.map((r) => ({ ...r, time: new Date(r.timestamp * 1000).toISOString() })),
+  };
+}
 
 export async function breakdown(env: Env, domain: string, p: Period, property: string, limit: number): Promise<{ property: string; results: BreakdownItem[] }> {
   const spec = PROPS[property];

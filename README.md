@@ -183,6 +183,13 @@ Tools exposed:
 | `get_aggregate_stats` | `period` | visitors, pageviews, visits, bounce rate, duration |
 | `get_timeseries` | `period` | visitors/pageviews per time bucket |
 | `get_breakdown` | `property`, `period`, `limit` | top values for a dimension |
+| `get_funnel` | `steps[]`, `period` | ordered conversion funnel with per-step drop-off |
+| `get_events` | `limit`, `name`, `period` | most recent raw events (newest first) |
+
+A funnel step is a page path (starting with `/`, e.g. `/pricing`) or a custom
+event name (e.g. `Signup`); steps are matched in time order per visitor. Ask:
+*"What's the conversion funnel from /pricing to /signup to the Signup goal?"* or
+*"Show me the last 20 events."*
 
 `period` ∈ `day`, `7d`, `30d`, `month`, `6mo`, `12mo`. `property` ∈ `page`,
 `entry_page`, `exit_page`, `source`, `referrer`, `utm_source`, `utm_medium`,
@@ -243,6 +250,8 @@ Private (require the dashboard session cookie):
 | `GET` | `/api/stats/aggregate?period=` | Top-line metrics |
 | `GET` | `/api/stats/timeseries?period=` | Visitors/pageviews per bucket |
 | `GET` | `/api/stats/breakdown?property=&period=&limit=` | Dimension breakdown |
+| `GET` | `/api/stats/funnel?steps=/pricing,/signup,Signup&period=` | Ordered conversion funnel |
+| `GET` | `/api/stats/events?limit=&name=&period=` | Recent raw events |
 
 ## Local development
 
@@ -262,6 +271,21 @@ curl http://localhost:8787/mcp -H "Authorization: Bearer dev-mcp-token" \
   -H "Content-Type: application/json" \
   --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_aggregate_stats","arguments":{}}}'
 ```
+
+## Testing
+
+An end-to-end smoke test boots `wrangler dev` against a local D1, seeds a
+deterministic set of events, and asserts the tracking scripts, ingestion (native
++ Plausible payloads), dashboard auth, the full stats API (aggregate, breakdown,
+funnel, events) and the MCP server (handshake, auth, tool calls). No Cloudflare
+account is needed — it runs entirely in local mode.
+
+```bash
+npm test          # bash scripts/smoke.sh
+```
+
+GitHub Actions runs `typecheck` → dry-run bundle → `npm test` on every push and
+pull request (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Privacy
 
