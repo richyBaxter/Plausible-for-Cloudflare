@@ -14,7 +14,7 @@ export const TRACKER_SCRIPT = `(function(){
   "use strict";
   var loc = window.location, doc = window.document;
   var script = doc.currentScript;
-  var endpoint = (script && script.getAttribute("data-api")) || new URL(script.src).origin + "/api/event";
+  var endpoint = (script && script.getAttribute("data-api")) || ((script && script.src ? new URL(script.src).origin : "") + "/api/event");
   var domain = script && script.getAttribute("data-domain");
   var hashMode = /hash/.test(script.src) || (script && script.getAttribute("data-hash") === "true");
 
@@ -78,7 +78,7 @@ export const INSIGHTS_SCRIPT = `(function(){
   "use strict";
   var loc = window.location, doc = window.document;
   var script = doc.currentScript;
-  var endpoint = (script && script.getAttribute("data-api")) || new URL(script.src).origin + "/api/event";
+  var endpoint = (script && script.getAttribute("data-api")) || ((script && script.src ? new URL(script.src).origin : "") + "/api/event");
   var domain = script && script.getAttribute("data-domain");
   var hashMode = /hash/.test(script.src) || (script && script.getAttribute("data-hash") === "true");
 

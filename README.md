@@ -1,5 +1,7 @@
 # Insights
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/richyBaxter/Plausible-for-Cloudflare)
+
 A privacy-friendly, cookieless web-analytics platform that runs **entirely on the
 Cloudflare edge** — a single Worker backed by **D1** (SQLite) and **KV**, with a
 clean native API, a **Plausible-compatible** ingestion shim, and a built-in
@@ -93,7 +95,31 @@ examples/
 
 ---
 
-## Deploy to `stats.houtini.ai`
+## One-click deploy
+
+The **Deploy to Cloudflare** button above is the fastest path: Cloudflare clones
+this repository into your GitHub account, reads `wrangler.jsonc`, **auto-provisions
+the D1 database and KV namespace** (writing real IDs into your copy), deploys the
+Worker, and wires up build-on-push CI. Two manual steps remain after the button:
+
+1. **Apply the database schema** (one-time):
+   ```bash
+   npx wrangler d1 migrations apply insights --remote
+   ```
+2. **Set the secrets** — until you do, the dashboard fails closed (no login
+   possible, no forgeable sessions) and `/mcp` returns 503; only ingestion is live:
+   ```bash
+   npx wrangler secret put DASHBOARD_PASSWORD
+   npx wrangler secret put AUTH_SECRET        # long random string
+   npx wrangler secret put MCP_API_KEY        # optional, enables /mcp
+   ```
+
+> **Forking?** `wrangler.jsonc` pins a `custom_domain` route to
+> `stats.houtini.ai`. Edit or remove the `routes` block during the deploy-button
+> review step (or afterwards) to use your own hostname or the default
+> `*.workers.dev` URL.
+
+## Manual deploy to `stats.houtini.ai`
 
 Prerequisites: a Cloudflare account with the **`houtini.ai` zone** already added,
 and [Node.js](https://nodejs.org) 18+.

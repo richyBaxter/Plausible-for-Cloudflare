@@ -246,7 +246,7 @@ function rows(el, items, key, max){
            '<span class="val">'+fmt(i[key]||0)+'</span></div>';
   }).join('');
 }
-function esc(s){ s=String(s); return s.replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function esc(s){ s=String(s); return s.replace(/[&<>"\\u0027]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 
 async function loadBreakdown(prop, el, key){
   const d = await api('/api/stats/breakdown?property='+prop+'&period='+period+'&limit=9'); if(!d)return;

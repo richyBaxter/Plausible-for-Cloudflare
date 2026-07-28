@@ -12,6 +12,9 @@ const COOKIE = "pfc_session";
 const TTL = 60 * 60 * 24 * 14; // 14 days
 
 export async function isAuthed(req: Request, env: Env): Promise<boolean> {
+  // Fail closed on an unconfigured deployment: without AUTH_SECRET the HMAC key
+  // would be empty/predictable and a session cookie could be forged.
+  if (!env.AUTH_SECRET || !env.DASHBOARD_PASSWORD) return false;
   const token = readCookie(req, COOKIE);
   if (!token) return false;
   const [expStr, sig] = token.split(".");
@@ -24,7 +27,8 @@ export async function isAuthed(req: Request, env: Env): Promise<boolean> {
 export async function login(req: Request, env: Env): Promise<Response> {
   const form = await req.formData();
   const password = String(form.get("password") ?? "");
-  if (!env.DASHBOARD_PASSWORD || !timingSafeEqual(password, env.DASHBOARD_PASSWORD)) {
+  // Both secrets must be configured before login is possible (see isAuthed).
+  if (!env.DASHBOARD_PASSWORD || !env.AUTH_SECRET || !timingSafeEqual(password, env.DASHBOARD_PASSWORD)) {
     return redirect("/login?error=1");
   }
   const exp = Math.floor(Date.now() / 1000) + TTL;

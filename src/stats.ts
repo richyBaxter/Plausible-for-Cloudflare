@@ -307,12 +307,15 @@ export interface FunnelStep {
  * or a custom event/goal name. A visitor "completes" step k only if they hit it
  * *after* completing step k-1, so the funnel is strictly ordered in time.
  */
+/** Upper bound on events scanned per funnel query, to stay inside D1/Worker limits. */
+const MAX_FUNNEL_EVENTS = 50_000;
+
 export async function funnel(
   env: Env,
   domain: string,
   p: Period,
   steps: string[],
-): Promise<{ steps: FunnelStep[]; entered: number }> {
+): Promise<{ steps: FunnelStep[]; entered: number; truncated?: boolean }> {
   const pages = steps.filter((s) => s.startsWith("/"));
   const goals = steps.filter((s) => !s.startsWith("/"));
 
@@ -331,10 +334,16 @@ export async function funnel(
     `SELECT user_id, name, pathname, timestamp
        FROM events
       WHERE domain = ? AND timestamp >= ? AND timestamp < ? AND (${clauses.join(" OR ")})
-      ORDER BY user_id, timestamp`,
+      ORDER BY user_id, timestamp
+      LIMIT ${MAX_FUNNEL_EVENTS + 1}`,
   )
     .bind(...binds)
     .all<{ user_id: string; name: string; pathname: string; timestamp: number }>();
+
+  // If we hit the cap, drop the final (possibly partial) visitor and say so
+  // rather than returning silently-wrong numbers.
+  const truncated = rows.results.length > MAX_FUNNEL_EVENTS;
+  if (truncated) rows.results.length = MAX_FUNNEL_EVENTS;
 
   const matches = (ev: { name: string; pathname: string }, step: string) =>
     step.startsWith("/") ? ev.name === "pageview" && ev.pathname === step : ev.name === step;
@@ -363,7 +372,7 @@ export async function funnel(
     conversion_rate: entered ? Math.round((counts[i] / entered) * 1000) / 10 : 0,
     dropoff: i === 0 ? 0 : counts[i - 1] - counts[i],
   }));
-  return { steps: result, entered };
+  return truncated ? { steps: result, entered, truncated } : { steps: result, entered };
 }
 
 // --------------------------------------------------------------------------- //
