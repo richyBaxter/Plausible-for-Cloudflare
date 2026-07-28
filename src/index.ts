@@ -5,6 +5,7 @@ import { isAuthed, login, logout } from "./auth";
 import { loginPage, dashboardPage } from "./dashboard";
 import { TRACKER_SCRIPT, INSIGHTS_SCRIPT } from "./tracker";
 import { handleMcp } from "./mcp/server";
+import { handleFunnels } from "./funnels";
 
 /**
  * Insights — a single Cloudflare Worker that serves four surfaces:
@@ -55,8 +56,13 @@ export default {
     const authed = await isAuthed(req, env);
 
     if (pathname.startsWith("/api/stats")) {
-      if (!authed) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "content-type": "application/json" } });
+      if (!authed) return unauthorized();
       return handleStats(url, env);
+    }
+
+    if (pathname === "/api/funnels") {
+      if (!authed) return unauthorized();
+      return handleFunnels(req, url, env);
     }
 
     if (pathname === "/" || pathname === "") {
@@ -67,6 +73,13 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
+
+function unauthorized(): Response {
+  return new Response(JSON.stringify({ error: "unauthorized" }), {
+    status: 401,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 function scriptResponse(body: string): Response {
   return new Response(body, {

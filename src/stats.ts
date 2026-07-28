@@ -1,4 +1,5 @@
 import type { Env } from "./types";
+import { getFunnelByName } from "./funnels";
 
 /**
  * Read-only stats API consumed by the dashboard. All endpoints are scoped to the
@@ -19,6 +20,8 @@ export async function handleStats(url: URL, env: Env): Promise<Response> {
       return json(await currentVisitors(env, domain));
     case "aggregate":
       return json(await aggregate(env, domain, period));
+    case "compare":
+      return json(await compare(env, domain, period));
     case "timeseries":
       return json(await timeseries(env, domain, period));
     case "breakdown":
@@ -32,12 +35,19 @@ export async function handleStats(url: URL, env: Env): Promise<Response> {
         ),
       );
     case "funnel": {
-      const steps = (url.searchParams.get("steps") ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const name = url.searchParams.get("name");
+      let steps: string[];
+      let funnelName: string | undefined;
+      if (name) {
+        const def = await getFunnelByName(env, name);
+        if (!def) return json({ error: `no saved funnel named '${name}'` }, 404);
+        steps = def.steps;
+        funnelName = def.name;
+      } else {
+        steps = (url.searchParams.get("steps") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      }
       if (steps.length < 2) return json({ error: "funnel requires at least 2 comma-separated steps" }, 400);
-      return json(await funnel(env, domain, period, steps.slice(0, 8)));
+      return json({ name: funnelName, ...(await funnel(env, domain, period, steps.slice(0, 8))) });
     }
     case "events":
       return json(
@@ -191,6 +201,43 @@ export async function aggregate(env: Env, domain: string, p: Period): Promise<Ag
     visit_duration: se?.visit_duration ?? 0,
     period: p.label,
   };
+}
+
+type Metrics = Omit<Aggregate, "period">;
+
+export interface Comparison {
+  period: string;
+  current: Metrics;
+  previous: Metrics;
+  /** Percentage change per metric vs the previous equal-length period; null when there is no baseline. */
+  change: Record<keyof Metrics, number | null>;
+}
+
+/**
+ * Compare the selected period against the immediately-preceding period of the
+ * same length (e.g. this 7 days vs the previous 7 days), with a % delta per metric.
+ */
+export async function compare(env: Env, domain: string, p: Period): Promise<Comparison> {
+  const span = p.to - p.from;
+  const prev: Period = { ...p, from: p.from - span, to: p.from, label: "previous" };
+
+  const [cur, old] = await Promise.all([aggregate(env, domain, p), aggregate(env, domain, prev)]);
+  const strip = (a: Aggregate): Metrics => ({
+    visitors: a.visitors,
+    pageviews: a.pageviews,
+    visits: a.visits,
+    bounce_rate: a.bounce_rate,
+    visit_duration: a.visit_duration,
+  });
+  const current = strip(cur);
+  const previous = strip(old);
+
+  const pct = (now: number, before: number): number | null =>
+    before === 0 ? null : Math.round(((now - before) / before) * 1000) / 10;
+  const change = {} as Record<keyof Metrics, number | null>;
+  (Object.keys(current) as (keyof Metrics)[]).forEach((k) => (change[k] = pct(current[k], previous[k])));
+
+  return { period: p.label, current, previous, change };
 }
 
 export async function timeseries(env: Env, domain: string, p: Period): Promise<{ interval: Interval; series: { date: string; visitors: number; pageviews: number }[] }> {

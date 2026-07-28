@@ -84,6 +84,20 @@ export function dashboardPage(env: Env): Response {
       <div id="goals" class="list"></div>
     </section>
   </div>
+
+  <section class="panel" id="funnels-panel">
+    <div class="panel-head">
+      <h3>Funnels</h3>
+      <button id="funnel-add-toggle" class="mini-btn" type="button">+ New funnel</button>
+    </div>
+    <form id="funnel-form" class="funnel-form" hidden>
+      <input id="funnel-name" placeholder="Funnel name (e.g. Signup flow)" required>
+      <input id="funnel-steps" placeholder="Steps, comma-separated: /pricing, /signup, Signup" required>
+      <button type="submit">Save</button>
+    </form>
+    <div id="funnels" class="funnels"></div>
+  </section>
+
   <footer class="foot">Powered by <a href="https://github.com/richybaxter/plausible-for-cloudflare">Insights</a> · privacy-friendly, cookieless analytics on the Cloudflare edge · <a href="/mcp" title="Model Context Protocol endpoint for AI clients">MCP</a></footer>
 </main>
 <script>${DASH_JS}</script>
@@ -138,6 +152,23 @@ main{max-width:1080px;margin:0 auto;padding:24px}
 .row .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78%}
 .row .val{font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600}
 .empty{color:var(--muted);font-size:13px;padding:18px 10px;text-align:center}
+.delta{font-size:12px;font-weight:600;margin-left:6px;vertical-align:middle}
+.delta.up{color:#22c55e}.delta.down{color:#ef4444}.delta.flat{color:var(--muted)}
+.mini-btn{font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer}
+.mini-btn:hover{border-color:var(--accent)}
+.funnel-form{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.funnel-form input{flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px}
+.funnel-form button{padding:8px 14px;border:0;border-radius:6px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+.funnels{display:flex;flex-direction:column;gap:20px}
+.funnel-title{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600;margin-bottom:8px}
+.funnel-title .del{font-size:12px;color:var(--muted);cursor:pointer;font-weight:400}
+.funnel-title .del:hover{color:#ef4444}
+.fstep{position:relative;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:6px;overflow:hidden;font-size:13px;margin-bottom:3px}
+.fstep .bg{position:absolute;left:0;top:0;bottom:0;background:var(--bar);z-index:0}
+.fstep .l,.fstep .r{position:relative;z-index:1}
+.fstep .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}
+.fstep .r{color:var(--muted);font-variant-numeric:tabular-nums}
+.fstep .conv{color:var(--accent);font-weight:600;margin-left:8px}
 .foot{text-align:center;color:var(--muted);font-size:12px;margin:8px 0 24px}
 .svgbar rect.bar{fill:var(--bar-strong);transition:opacity .15s}.svgbar rect.bar:hover{opacity:.75}
 .svgbar text{fill:var(--muted);font-size:10px}
@@ -151,16 +182,55 @@ let period = '7d';
 
 async function api(path){ const r = await fetch(path,{credentials:'same-origin'}); if(r.status===401){location.href='/login';return null;} return r.json(); }
 
-function tile(k,v){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+function tile(k,v,delta,inverse){
+  return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+deltaBadge(delta,inverse)+'</div></div>';
+}
+function deltaBadge(d,inverse){
+  if(d===null||d===undefined) return '';
+  if(d===0) return ' <span class="delta flat">0%</span>';
+  var better = (d>0) !== !!inverse; // inverse metrics (bounce rate) are better when down
+  var arrow = d>0 ? '▲' : '▼';
+  return ' <span class="delta '+(better?'up':'down')+'">'+arrow+Math.abs(d)+'%</span>';
+}
 
 async function loadTiles(){
-  const a = await api('/api/stats/aggregate?period='+period); if(!a)return;
+  const a = await api('/api/stats/compare?period='+period); if(!a)return;
+  const c=a.current, ch=a.change;
   $('#tiles').innerHTML =
-    tile('Unique visitors', fmt(a.visitors)) +
-    tile('Total pageviews', fmt(a.pageviews)) +
-    tile('Visits', fmt(a.visits)) +
-    tile('Bounce rate', (a.bounce_rate||0)+'%') +
-    tile('Visit duration', dur(a.visit_duration));
+    tile('Unique visitors', fmt(c.visitors), ch.visitors) +
+    tile('Total pageviews', fmt(c.pageviews), ch.pageviews) +
+    tile('Visits', fmt(c.visits), ch.visits) +
+    tile('Bounce rate', (c.bounce_rate||0)+'%', ch.bounce_rate, true) +
+    tile('Visit duration', dur(c.visit_duration), ch.visit_duration);
+}
+
+async function loadFunnels(){
+  const defs = await api('/api/funnels'); if(!defs)return;
+  if(!defs.length){ $('#funnels').innerHTML='<div class="empty">No funnels yet. Create one to track conversion across pages and goals.</div>'; return; }
+  const parts = await Promise.all(defs.map(async function(d){
+    const f = await api('/api/stats/funnel?name='+encodeURIComponent(d.name)+'&period='+period);
+    return renderFunnel(d, f);
+  }));
+  $('#funnels').innerHTML = parts.join('');
+  document.querySelectorAll('#funnels .del').forEach(function(el){
+    el.addEventListener('click', function(){ deleteFunnel(el.dataset.id); });
+  });
+}
+function renderFunnel(def, f){
+  if(!f || !f.steps){ return '<div class="funnel"><div class="funnel-title"><span>'+esc(def.name)+'</span></div><div class="empty">No data</div></div>'; }
+  const top = Math.max(f.entered||0, 1);
+  const steps = f.steps.map(function(s){
+    const w = Math.max(2, Math.round((s.visitors/top)*100));
+    return '<div class="fstep"><span class="bg" style="width:'+w+'%"></span>'+
+      '<span class="l" title="'+esc(s.step)+'">'+esc(s.step)+'</span>'+
+      '<span class="r">'+fmt(s.visitors)+' <span class="conv">'+s.conversion_rate+'%</span></span></div>';
+  }).join('');
+  return '<div class="funnel"><div class="funnel-title"><span>'+esc(def.name)+'</span>'+
+    '<span class="del" data-id="'+def.id+'">delete</span></div>'+steps+'</div>';
+}
+async function deleteFunnel(id){
+  await fetch('/api/funnels?id='+id,{method:'DELETE',credentials:'same-origin'});
+  loadFunnels();
 }
 
 async function loadLive(){ const c = await api('/api/stats/current'); if(c) $('#live').textContent = c.visitors+' current visitor'+(c.visitors===1?'':'s'); }
@@ -218,7 +288,8 @@ async function refresh(){
     loadBreakdown(document.querySelector('#src-tabs h3.active').dataset.prop, $('#sources')),
     loadBreakdown(document.querySelector('#loc-tabs h3.active').dataset.prop, $('#locations')),
     loadBreakdown(document.querySelector('#dev-tabs h3.active').dataset.prop, $('#devices')),
-    loadBreakdown('goal', $('#goals'), 'visitors')
+    loadBreakdown('goal', $('#goals'), 'visitors'),
+    loadFunnels()
   ]);
 }
 
@@ -226,5 +297,16 @@ $('#period').addEventListener('change', function(e){ period = e.target.value; re
 wireTabs('src-tabs', $('#sources'));
 wireTabs('loc-tabs', $('#locations'));
 wireTabs('dev-tabs', $('#devices'));
+
+$('#funnel-add-toggle').addEventListener('click', function(){ const f=$('#funnel-form'); f.hidden=!f.hidden; if(!f.hidden) $('#funnel-name').focus(); });
+$('#funnel-form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const name = $('#funnel-name').value.trim();
+  const steps = $('#funnel-steps').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+  const r = await fetch('/api/funnels',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({name:name,steps:steps})});
+  if(r.ok){ $('#funnel-name').value=''; $('#funnel-steps').value=''; $('#funnel-form').hidden=true; loadFunnels(); }
+  else { const er = await r.json().catch(function(){return {error:'failed'};}); alert(er.error||'Failed to save funnel'); }
+});
+
 refresh();
 setInterval(loadLive, 15000);`;

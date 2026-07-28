@@ -32,7 +32,10 @@ deploy to **`stats.houtini.ai`**.
 - The metrics that matter: unique visitors, pageviews, visits, bounce rate,
   visit duration, top pages, sources (with UTM), countries, regions, cities,
   browsers, OS, devices, screen sizes, and custom goals.
-- A **built-in dashboard** with password login.
+- **Period-over-period comparison** (this week vs last week, with % deltas).
+- **Saved conversion funnels** — define named funnels once and reuse them on the
+  dashboard and via MCP.
+- A **built-in dashboard** with password login, top-line deltas and funnels.
 - A **remote MCP server** at `/mcp` exposing the analytics as tools for Claude
   and other MCP clients.
 
@@ -181,15 +184,19 @@ Tools exposed:
 | --- | --- | --- |
 | `get_current_visitors` | — | live visitors (last 5 min) |
 | `get_aggregate_stats` | `period` | visitors, pageviews, visits, bounce rate, duration |
+| `get_aggregate_comparison` | `period` | current vs previous equal-length period, with % change |
 | `get_timeseries` | `period` | visitors/pageviews per time bucket |
 | `get_breakdown` | `property`, `period`, `limit` | top values for a dimension |
-| `get_funnel` | `steps[]`, `period` | ordered conversion funnel with per-step drop-off |
+| `get_funnel` | `name` or `steps[]`, `period` | ordered conversion funnel with per-step drop-off |
+| `list_funnels` | — | saved funnel definitions |
 | `get_events` | `limit`, `name`, `period` | most recent raw events (newest first) |
 
 A funnel step is a page path (starting with `/`, e.g. `/pricing`) or a custom
-event name (e.g. `Signup`); steps are matched in time order per visitor. Ask:
-*"What's the conversion funnel from /pricing to /signup to the Signup goal?"* or
-*"Show me the last 20 events."*
+event name (e.g. `Signup`); steps are matched in time order per visitor. Funnels
+can be defined once (in the dashboard or via `POST /api/funnels`) and then run by
+`name`, or passed ad-hoc as `steps`. Ask: *"Are we up or down on visitors vs last
+week?"*, *"How does the Signup flow funnel convert this month?"*, or *"Show me the
+last 20 events."*
 
 `period` ∈ `day`, `7d`, `30d`, `month`, `6mo`, `12mo`. `property` ∈ `page`,
 `entry_page`, `exit_page`, `source`, `referrer`, `utm_source`, `utm_medium`,
@@ -248,10 +255,13 @@ Private (require the dashboard session cookie):
 | `GET` | `/` | Dashboard UI |
 | `GET` | `/api/stats/current` | Live visitors (last 5 min) |
 | `GET` | `/api/stats/aggregate?period=` | Top-line metrics |
+| `GET` | `/api/stats/compare?period=` | Top-line metrics vs the previous period, with % change |
 | `GET` | `/api/stats/timeseries?period=` | Visitors/pageviews per bucket |
 | `GET` | `/api/stats/breakdown?property=&period=&limit=` | Dimension breakdown |
-| `GET` | `/api/stats/funnel?steps=/pricing,/signup,Signup&period=` | Ordered conversion funnel |
+| `GET` | `/api/stats/funnel?steps=/pricing,/signup,Signup&period=` | Ad-hoc conversion funnel |
+| `GET` | `/api/stats/funnel?name=Signup%20flow&period=` | Run a saved funnel by name |
 | `GET` | `/api/stats/events?limit=&name=&period=` | Recent raw events |
+| `GET`/`POST`/`DELETE` | `/api/funnels` | List / create-update / delete saved funnel definitions |
 
 ## Local development
 

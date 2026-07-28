@@ -1,6 +1,7 @@
 import type { Env } from "../types";
 import {
   aggregate,
+  compare,
   timeseries,
   breakdown,
   currentVisitors,
@@ -10,6 +11,7 @@ import {
   PERIODS,
   PROPERTIES,
 } from "../stats";
+import { listFunnels, getFunnelByName } from "../funnels";
 
 /**
  * The Insights analytics data, exposed as MCP tools so Claude (or any MCP client)
@@ -84,12 +86,23 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: "get_aggregate_comparison",
+    description:
+      "Top-line metrics for a period alongside the immediately-preceding period of the same length (e.g. this 7 days vs the previous 7 days), with the percentage change per metric. Use this to answer 'are we up or down vs last week?'.",
+    inputSchema: {
+      type: "object",
+      properties: { period: periodProp, domain: domainProp },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "get_funnel",
     description:
-      "Ordered conversion funnel. Give 2-8 steps, each either a page path (starting with '/', e.g. '/pricing') or a custom event/goal name (e.g. 'Signup'). Returns per-step visitor counts, conversion rate vs the first step, and drop-off. Steps are matched in time order per visitor.",
+      "Ordered conversion funnel. Provide either `name` (a saved funnel) OR `steps` (2-8 ad-hoc steps, each a page path like '/pricing' or a custom event name like 'Signup'). Returns per-step visitor counts, conversion rate vs the first step, and drop-off. Steps are matched in time order per visitor.",
     inputSchema: {
       type: "object",
       properties: {
+        name: { type: "string", description: "Name of a saved funnel (see list_funnels). Alternative to `steps`." },
         steps: {
           type: "array",
           items: { type: "string" },
@@ -100,9 +113,13 @@ export const TOOLS: McpTool[] = [
         period: periodProp,
         domain: domainProp,
       },
-      required: ["steps"],
       additionalProperties: false,
     },
+  },
+  {
+    name: "list_funnels",
+    description: "List the saved funnel definitions (name + steps) available to get_funnel.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "get_events",
@@ -139,6 +156,10 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
       return currentVisitors(env, domain);
     case "get_aggregate_stats":
       return aggregate(env, domain, period());
+    case "get_aggregate_comparison":
+      return compare(env, domain, period());
+    case "list_funnels":
+      return { funnels: await listFunnels(env) };
     case "get_timeseries":
       return timeseries(env, domain, period());
     case "get_breakdown": {
@@ -150,9 +171,18 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
       return breakdown(env, domain, period(), property, limit);
     }
     case "get_funnel": {
-      const steps = Array.isArray(args.steps) ? args.steps.map((s) => String(s).trim()).filter(Boolean) : [];
-      if (steps.length < 2) throw new Error("A funnel needs at least 2 steps.");
-      return funnel(env, domain, period(), steps.slice(0, 8));
+      let steps: string[];
+      let funnelName: string | undefined;
+      if (typeof args.name === "string" && args.name) {
+        const def = await getFunnelByName(env, args.name);
+        if (!def) throw new Error(`No saved funnel named '${args.name}'. Use list_funnels to see available funnels.`);
+        steps = def.steps;
+        funnelName = def.name;
+      } else {
+        steps = Array.isArray(args.steps) ? args.steps.map((s) => String(s).trim()).filter(Boolean) : [];
+      }
+      if (steps.length < 2) throw new Error("Provide a saved funnel `name` or at least 2 `steps`.");
+      return { name: funnelName, ...(await funnel(env, domain, period(), steps.slice(0, 8))) };
     }
     case "get_events": {
       const limit = clampInt(args.limit, 20, 1, 100);

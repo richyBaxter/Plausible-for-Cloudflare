@@ -51,6 +51,12 @@ trap cleanup EXIT
 echo "==> Applying local D1 migrations"
 npx wrangler d1 migrations apply "$DB" --local >/dev/null 2>&1 || { echo "migration failed"; exit 1; }
 
+# Reset the local dataset so exact-count assertions are deterministic across reruns
+# (a CI checkout starts empty; local dev keeps the D1 file between runs).
+echo "==> Resetting local dataset"
+npx wrangler d1 execute "$DB" --local \
+  --command "DELETE FROM events; DELETE FROM sessions; DELETE FROM funnels;" >/dev/null 2>&1 || true
+
 echo "==> Starting wrangler dev on :$PORT"
 npx wrangler dev --port "$PORT" --local \
   --var "DASHBOARD_PASSWORD:$PASS" --var "AUTH_SECRET:$SECRET" --var "MCP_API_KEY:$MCP" \
@@ -127,6 +133,20 @@ assert_eq "funnel step2 conversion is 50%"    "$(printf '%s' "$FUN" | json_get s
 EVENTS="$(curl -s "${AUTH[@]}" "$B/api/stats/events?period=day&limit=50")"
 assert_has "raw events export includes Signup" "$EVENTS" "Signup"
 
+CMP="$(curl -s "${AUTH[@]}" "$B/api/stats/compare?period=day")"
+assert_eq "compare: current visitors is 2"      "$(printf '%s' "$CMP" | json_get current.visitors)"  2
+assert_eq "compare: previous visitors is 0"     "$(printf '%s' "$CMP" | json_get previous.visitors)" 0
+assert_eq "compare: no baseline -> null change" "$(printf '%s' "$CMP" | json_get change.visitors)"   "null"
+
+echo "==> Saved funnels"
+CREATE="$(curl -s "${AUTH[@]}" -o /dev/null -w '%{http_code}' -X POST "$B/api/funnels" \
+  -H 'Content-Type: application/json' --data '{"name":"Signup flow","steps":["/pricing","/signup","Signup"]}')"
+assert_eq "create saved funnel -> 201" "$CREATE" 201
+assert_has "list funnels includes it" "$(curl -s "${AUTH[@]}" "$B/api/funnels")" "Signup flow"
+NAMED="$(curl -s "${AUTH[@]}" "$B/api/stats/funnel?name=Signup%20flow&period=day")"
+assert_eq "saved funnel computes: 2 entered" "$(printf '%s' "$NAMED" | json_get entered)" 2
+assert_eq "saved funnel echoes its name"     "$(printf '%s' "$NAMED" | json_get name)" "Signup flow"
+
 echo "==> MCP server"
 assert_eq "MCP without token -> 401" \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/mcp" -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')" 401
@@ -135,11 +155,22 @@ INIT="$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVe
 assert_eq "MCP initialize serverInfo.name" "$(printf '%s' "$INIT" | json_get result.serverInfo.name)" "insights"
 
 TOOLS="$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')"
-assert_eq "MCP exposes 6 tools" "$(printf '%s' "$TOOLS" | json_get result.tools | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).length)')" 6
+assert_eq "MCP exposes 8 tools" "$(printf '%s' "$TOOLS" | json_get result.tools | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).length)')" 8
 
 CALL="$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_funnel","arguments":{"period":"day","steps":["/pricing","/signup","Signup"]}}}')"
 CALL_TEXT="$(printf '%s' "$CALL" | json_get result.content.0.text)"
-assert_eq "MCP get_funnel returns 2 entered" "$(printf '%s' "$CALL_TEXT" | json_get entered)" 2
+assert_eq "MCP get_funnel (ad-hoc) returns 2 entered" "$(printf '%s' "$CALL_TEXT" | json_get entered)" 2
+
+NAMEDCALL="$(mcp '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_funnel","arguments":{"period":"day","name":"Signup flow"}}}')"
+assert_eq "MCP get_funnel (by saved name) returns 2 entered" \
+  "$(printf '%s' "$NAMEDCALL" | json_get result.content.0.text | json_get entered)" 2
+
+LISTF="$(mcp '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_funnels","arguments":{}}}')"
+assert_has "MCP list_funnels includes saved funnel" "$(printf '%s' "$LISTF" | json_get result.content.0.text)" "Signup flow"
+
+CMPCALL="$(mcp '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"get_aggregate_comparison","arguments":{"period":"day"}}}')"
+assert_eq "MCP get_aggregate_comparison current visitors" \
+  "$(printf '%s' "$CMPCALL" | json_get result.content.0.text | json_get current.visitors)" 2
 
 BADCALL="$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_breakdown","arguments":{"property":"nope"}}}')"
 assert_eq "MCP tool error surfaces isError" "$(printf '%s' "$BADCALL" | json_get result.isError)" "true"
